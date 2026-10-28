@@ -82,6 +82,32 @@ class BuildServerTest extends AbstractServerTest:
       case _ => fail("JVM build target should contain javaVersion and javaHome")
   }
 
+  test("workspace/buildTargets reports Scala platforms") {
+    val id = sendRequest("workspace/buildTargets")
+    val result =
+      svr.session.waitForResultInResponseMsg[WorkspaceBuildTargetsResult](10.seconds, id).get
+    for
+      (project, expected) <- Seq(
+        "util" -> ScalaPlatform.JVM,
+        "jsProject" -> ScalaPlatform.JS,
+        "nativeProject" -> ScalaPlatform.Native,
+      )
+      configuration <- Seq("Compile", "Test")
+    do
+      val identifier = BuildTargetIdentifier(buildTargetUri(project, configuration))
+      val target = result.targets.find(_.id == identifier).getOrElse {
+        fail(s"Missing BSP target $identifier")
+      }
+      assert(target.dataKind.contains("scala"))
+      val scalaTarget = Converter.fromJsonOptionUnsafe[ScalaBuildTarget](target.data)
+      assert(scalaTarget.platform == expected)
+    end for
+
+    val sbtTarget = result.targets.find(_.displayName.contains("buildserver-root-build")).get
+    val sbtData = Converter.fromJsonOptionUnsafe[SbtBuildTarget](sbtTarget.data)
+    assert(sbtData.scalaBuildTarget.platform == ScalaPlatform.JVM)
+  }
+
   test("buildTarget/sources") {
     val buildTarget = buildTargetUri("util", "Compile")
     val badBuildTarget = buildTargetUri("badBuildTarget", "Compile")

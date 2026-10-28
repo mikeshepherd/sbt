@@ -18,6 +18,12 @@ lazy val runAndTest = project.in(file("run-and-test"))
   )
   .dependsOn(util % Optional)
 
+lazy val jsProject = project.in(file("js-project"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(scalaVersion := "2.13.18")
+
+lazy val nativeProject = project.in(file("native-project")).enablePlugins(ScalaNativePlugin)
+
 lazy val reportError = project.in(file("report-error"))
 
 lazy val reportWarning = project.in(file("report-warning"))

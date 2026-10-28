@@ -25,7 +25,7 @@ import sbt.internal.protocol.{ InitializeOption, JsonRpcRequestMessage }
 import sbt.internal.util.{ Attributed, ErrorHandling, MessageOnlyException }
 import sbt.internal.util.complete.{ Parser, Parsers }
 import sbt.librarymanagement.CrossVersion.binaryScalaVersion
-import sbt.librarymanagement.{ Configuration, ScalaArtifacts, UpdateReport }
+import sbt.librarymanagement.{ Configuration, Platform, ScalaArtifacts, UpdateReport }
 import sbt.std.TaskExtra
 import sbt.util.Logger
 import sjsonnew.shaded.scalajson.ast.unsafe.{ JNull, JValue }
@@ -649,11 +649,15 @@ object BuildServerProtocol:
           case None => (sys.props.get("java.home").map(Paths.get(_)).map(_.toUri), false)
         val javaVersionForTarget = extractJavaVersion(javacOptions.value, isForkedJava)
         val jvmBuildTarget = JvmBuildTarget(javaHomeForTarget, javaVersionForTarget)
+        val scalaPlatform = Keys.platform.value match
+          case Platform.sjs1      => ScalaPlatform.JS
+          case Platform.native0_5 => ScalaPlatform.Native
+          case _                  => ScalaPlatform.JVM
         val compileData = ScalaBuildTarget(
           scalaOrganization = scalaOrganization.value,
           scalaVersion = scalaVersion.value,
           scalaBinaryVersion = scalaBinaryVersion.value,
-          platform = ScalaPlatform.JVM,
+          platform = scalaPlatform,
           jars = scalaJars.toVector,
           jvmBuildTarget = jvmBuildTarget,
         )
