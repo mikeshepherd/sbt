@@ -73,6 +73,8 @@ trait JsonProtocol extends sjsonnew.BasicJsonProtocol
   with sbt.internal.bsp.codec.MetalsMetadataFormats
   with sbt.internal.bsp.codec.ScalaTestClassesItemFormats
   with sbt.internal.bsp.codec.ScalaTestParamsFormats
+  with sbt.internal.bsp.codec.ScalaTestSuiteSelectionFormats
+  with sbt.internal.bsp.codec.ScalaTestSuitesFormats
   with sbt.internal.bsp.codec.ScalaTestClassesParamsFormats
   with sbt.internal.bsp.codec.ScalaTestClassesResultFormats
   with sbt.internal.bsp.codec.ScalaMainClassesParamsFormats

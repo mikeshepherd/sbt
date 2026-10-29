@@ -27,6 +27,7 @@ import testing.{
   Selector,
   SubclassFingerprint,
   SuiteSelector,
+  TestSelector,
   TaskDef,
   Task as TestTask
 }
@@ -177,6 +178,9 @@ object Tests:
   /** Names explicitly requested (e.g. testOnly com.example.MySuite). Used to set explicitlySpecified on TaskDef. */
   final case class ExplicitlyRequestedNames(names: Seq[String]) extends TestOption
 
+  private[sbt] final case class SelectedTestNames(names: Map[String, Seq[String]])
+      extends TestOption
+
   /** Defines a TestOption that passes arguments `args` to all test frameworks. */
   def Argument(args: String*): Argument = Argument(None, args.toList)
 
@@ -286,6 +290,9 @@ object Tests:
     var orderedFilters = Seq[String => Boolean]()
     val excludeTestsSet = new HashSet[String]
     var explicitlyRequestedNames = Set.empty[String]
+    val selectedTestNames = config.options
+      .collectFirst { case SelectedTestNames(names) => names }
+      .getOrElse(Map.empty[String, Seq[String]])
     val setup, cleanup = new ListBuffer[ClassLoader => Unit]
     val testListeners = new ListBuffer[TestReportListener]
     val undefinedFrameworks = new ListBuffer[String]
@@ -303,6 +310,7 @@ object Tests:
         case ExplicitlyRequestedNames(names) =>
           explicitlyRequestedNames = names.filter(isExplicitFqn).toSet
           ()
+        case _: SelectedTestNames        => ()
         case Exclude(exclude)            => excludeTestsSet ++= exclude; ()
         case Listeners(listeners)        => testListeners ++= listeners; ()
         case Setup(setupFunction, _)     => setup += setupFunction; ()
@@ -331,7 +339,9 @@ object Tests:
         t.name,
         t.fingerprint,
         explicitlySpecified = explicitlyRequestedNames.contains(t.name),
-        t.selectors
+        selectedTestNames.get(t.name).filter(_.nonEmpty) match
+          case Some(names) => names.map(name => new TestSelector(name): Selector).toArray
+          case None        => t.selectors
       )
     )
     new ProcessedOptions(

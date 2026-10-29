@@ -34,6 +34,7 @@ class BuildServerTest extends AbstractServerTest:
   test("build/initialize") {
     val id = initializeRequest()
     val res = svr.session.waitForResultInResponseMsg[InitializeBuildResult](10.seconds, id).get
+    assert(res.bspVersion == "2.2.0-M2")
     assert(res.capabilities.resourcesProvider.contains(true))
     assert(res.capabilities.outputPathsProvider.contains(true))
   }
@@ -654,6 +655,58 @@ class BuildServerTest extends AbstractServerTest:
     val id = sendRequest("buildTarget/test", params)
     val res = svr.session.waitForResultInResponseMsg[TestResult](10.seconds, id).get
     assert(res.statusCode == StatusCode.Success)
+  }
+
+  test("buildTarget/test: run scala-test-suites classes") {
+    val target = BuildTargetIdentifier(buildTargetUri("runAndTest", "Test"))
+    val params = TestParams(
+      Vector(target),
+      None,
+      Vector.empty,
+      Some("scala-test-suites"),
+      Some(Converter.toJson(Vector("tests.PassingTest")).get)
+    )
+    val id = sendRequest("buildTarget/test", params)
+    val result = svr.session.waitForResultInResponseMsg[TestResult](10.seconds, id).get
+    assert(result.statusCode == StatusCode.Success)
+  }
+
+  test("buildTarget/test: select a suite") {
+    val target = BuildTargetIdentifier(buildTargetUri("runAndTest", "Test"))
+    val selection = ScalaTestSuites(
+      Vector(ScalaTestSuiteSelection("tests.SelectionTest", Vector.empty)),
+      Vector.empty,
+      Vector.empty
+    )
+    val params = TestParams(
+      Vector(target),
+      None,
+      Vector.empty,
+      Some("scala-test-suites-selection"),
+      Some(Converter.toJson(selection).get)
+    )
+    val id = sendRequest("buildTarget/test", params)
+    val result = svr.session.waitForResultInResponseMsg[TestResult](10.seconds, id).get
+    assert(result.statusCode == StatusCode.Error)
+  }
+
+  test("buildTarget/test: select an individual test") {
+    val target = BuildTargetIdentifier(buildTargetUri("runAndTest", "Test"))
+    val selection = ScalaTestSuites(
+      Vector(ScalaTestSuiteSelection("tests.SelectionTest", Vector("selected test"))),
+      Vector("-Dexample=true"),
+      Vector("EXAMPLE=true")
+    )
+    val params = TestParams(
+      Vector(target),
+      None,
+      Vector.empty,
+      Some("scala-test-suites-selection"),
+      Some(Converter.toJson(selection).get)
+    )
+    val id = sendRequest("buildTarget/test", params)
+    val result = svr.session.waitForResultInResponseMsg[TestResult](10.seconds, id).get
+    assert(result.statusCode == StatusCode.Success)
   }
 
   test("buildTarget/compile: report error") {

@@ -528,6 +528,7 @@ object Keys {
   val bspBuildTargetCompileItem = taskKey[Int]("").withRank(DTask)
   @transient private[sbt] val bspCompileTask = taskKey[BspCompileTask]("").withRank(DTask)
   val bspBuildTargetTest = inputKey[Unit]("Corresponds to buildTarget/test request").withRank(DTask)
+  val bspTestSelection = inputKey[TestResult]("Run selected BSP test suites").withRank(DTask)
   val bspBuildTargetRun = inputKey[Unit]("Corresponds to buildTarget/run request").withRank(DTask)
   val bspBuildTargetCleanCache = inputKey[Unit]("Corresponds to buildTarget/cleanCache request").withRank(DTask)
   val bspBuildTargetScalacOptions = inputKey[Unit]("").withRank(DTask)

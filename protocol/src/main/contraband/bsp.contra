@@ -799,6 +799,18 @@ type ScalaTestParams {
   testClasses: [sbt.internal.bsp.ScalaTestClassesItem]
 }
 
+## Scala test suite selection for buildTarget/test with dataKind "scala-test-suites-selection".
+type ScalaTestSuites {
+  suites: [sbt.internal.bsp.ScalaTestSuiteSelection]
+  jvmOptions: [String]
+  environmentVariables: [String]
+}
+
+type ScalaTestSuiteSelection {
+  className: String!
+  tests: [String]
+}
+
 ## Scala Test Class Request
 ## The build target scala test options request is sent from the client to the server
 ## to query for the list of fully qualified names of test classes in a given list of targets.

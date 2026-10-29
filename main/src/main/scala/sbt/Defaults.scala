@@ -1600,6 +1600,59 @@ object Defaults extends BuildCommon with DefExtra:
     }
   end inputTests0
 
+  private[sbt] def bspSelectedTests(
+      selected: Map[String, Seq[String]]
+  ): Initialize[Task[TestResult]] =
+    Def.taskDyn {
+      import sbt.TupleSyntax.*
+      val fpm = testForkedParallelism.value
+      val pw = testPersistentWorker.value
+      val pwMax = Tags.effectiveLimit(concurrentRestrictions.value, Tags.ForkedTestGroup, 12)
+      (
+        test / streams,
+        loadedTestFrameworks,
+        testLoader,
+        test / testGrouping,
+        test / testExecution,
+        test / fullClasspath,
+        testForkedParallel.toTaskable,
+        test / javaOptions,
+        classLoaderLayeringStrategy,
+        thisProject,
+        fileConverter,
+      ).flatMapN { (s, lt, tl, groups, execution, cp, fp, jo, strategy, project, converter) =>
+        val available = groups.flatMap(_.tests.map(_.name)).toSet
+        val missing = selected.keySet -- available
+        if missing.nonEmpty then sys.error(s"Test suites not found: ${missing.mkString(", ")}")
+        val options = Seq(
+          Tests.Filter(selected.contains),
+          Tests.ExplicitlyRequestedNames(selected.keys.toSeq),
+          Tests.SelectedTestNames(selected),
+        ) ++ execution.options
+        allTestGroupsTask(
+          s,
+          lt,
+          tl,
+          groups,
+          execution.copy(options = options),
+          cp,
+          fp,
+          fpm,
+          jo,
+          strategy,
+          s"${Util.quoteIfNotScalaId(project.id)} / ",
+          converter,
+          pw,
+          pwMax,
+        ).map { out =>
+          out.overall match
+            case TestResult.Error | TestResult.Failed =>
+              throw new TestsFailedException("BSP test", Some(out))
+            case result => result
+        }
+      }
+    }
+
   def createTestRunners(
       frameworks: Map[TestFramework, Framework],
       loader: ClassLoader,

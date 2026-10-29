@@ -356,6 +356,15 @@ object BuildServerProtocol:
     run / bspBuildTargetJvmEnvironmentItem := jvmEnvironmentItem(run / forkOptions).value,
     bspInternalDependencyConfigurations := internalDependencyConfigurationsSetting.value,
     bspScalaTestClassesItem := scalaTestClassesTask.value,
+    bspTestSelection := Def.inputTaskDyn {
+      val json = jsonParser.parsed
+      val selection = json.flatMap(Converter.fromJson[ScalaTestSuites]) match
+        case Failure(e)     => throw LangServerError(ErrorCodes.ParseError, e.getMessage)
+        case Success(value) => value
+      val selected = selection.suites.groupMap(_.className)(_.tests).view.mapValues(_.flatten).toMap
+      Defaults.bspSelectedTests(selected)
+    }.evaluated,
+    bspTestSelection / aggregate := false,
     bspScalaMainClassesItem := scalaMainClassesTask.value,
     Keys.compile / bspReporter := Def.uncached {
       val targetId = bspTargetIdentifier.value
@@ -954,11 +963,29 @@ object BuildServerProtocol:
           }
           testTasks.joinWith(ts => TaskExtra.joinTasks(ts).join).result
 
+        case Some("scala-test-suites") =>
+          val data = testParams.data.getOrElse(JNull)
+          val classes = Converter.fromJson[Vector[String]](data) match
+            case Failure(e)     => throw LangServerError(ErrorCodes.ParseError, e.getMessage)
+            case Success(value) => value
+          val testTasks = testParams.targets.map { target =>
+            val scope = workspace.scopes(target)
+            classes.toList match
+              case Nil    => Def.task(())
+              case suites => (scope / testOnly).toTask(" " + suites.mkString(" ")).map(_ => ())
+          }
+          testTasks.joinWith(ts => TaskExtra.joinTasks(ts).join).result
+
+        case Some("scala-test-suites-selection") =>
+          val data = testParams.data.getOrElse(JNull)
+          val testTasks = testParams.targets.map { target =>
+            val scope = workspace.scopes(target)
+            (scope / bspTestSelection).toTask(" " + CompactPrinter(data)).map(_ => ())
+          }
+          testTasks.joinWith(ts => TaskExtra.joinTasks(ts).join).result
+
         case Some(dataKind) =>
-          throw LangServerError(
-            ErrorCodes.InvalidParams,
-            s"Unexpected data of kind '$dataKind', 'scala-main-class' is expected"
-          )
+          throw LangServerError(ErrorCodes.InvalidParams, s"Unexpected test data kind '$dataKind'")
 
         case None =>
           // run allTests in testParams.targets
