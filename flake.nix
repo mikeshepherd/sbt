@@ -10,6 +10,7 @@
       pkgs = import nixpkgs { inherit system; };
       inherit (pkgs) lib;
       jdk = pkgs.jdk21;
+      graalvm = pkgs.graalvmPackages.graalvm-ce;
       version = "2.1.0-SNAPSHOT";
       buildDefinition = lib.cleanSourceWith {
         src = self;
@@ -147,10 +148,77 @@
           platforms = [ system ];
         };
       };
+      sbtn = pkgs.stdenvNoCC.mkDerivation {
+        pname = "sbtn";
+        inherit version;
+        src = self;
+        nativeBuildInputs = [ pkgs.sbt jdk graalvm pkgs.makeWrapper pkgs.patchelf pkgs.cacert ];
+        buildInputs = [ sbtDependencies ];
+
+        buildPhase = ''
+          runHook preBuild
+          export HOME="$TMPDIR/home"
+          mkdir -p "$HOME"
+          cp -r ${sbtDependencies}/sbt-boot "$HOME/sbt-boot"
+          cp -r ${sbtDependencies}/coursier "$HOME/coursier"
+          if [ -d ${sbtDependencies}/ivy2 ]; then
+            cp -r ${sbtDependencies}/ivy2 "$HOME/ivy2"
+          else
+            mkdir -p "$HOME/ivy2"
+          fi
+          chmod -R u+w "$HOME"
+          export JAVA_HOME=${jdk}
+          export CI=true
+          export COURSIER_CACHE="$HOME/coursier"
+          sbt --server -batch -Dsbt.io.virtual=false -Dsbt.server.autostart=false \
+            -Dsbt.boot.directory="$HOME/sbt-boot" \
+            -Dsbt.ivy.home="$HOME/ivy2" \
+            'set sbtClientProj / nativeImageCommand := Seq("${graalvm}/bin/native-image")' \
+            'sbtClientProj / nativeImage'
+          runHook postBuild
+        '';
+
+        installPhase = ''
+          runHook preInstall
+          mkdir -p "$out/bin" "$out/libexec"
+          cp target/out/jvm/u/sbt-client/bin/sbtn "$out/libexec/sbtn"
+          patchelf --set-interpreter ${pkgs.stdenv.cc.bintools.dynamicLinker} "$out/libexec/sbtn"
+          makeWrapper "$out/libexec/sbtn" "$out/bin/sbtn" \
+            --add-flags "--sbt-script=${sbt}/bin/sbt"
+          runHook postInstall
+        '';
+
+        doInstallCheck = true;
+        installCheckPhase = ''
+          runHook preInstallCheck
+          export HOME="$TMPDIR/install-home"
+          mkdir -p "$HOME/project"
+          cp -r ${sbtDependencies}/coursier "$HOME/coursier"
+          chmod -R u+w "$HOME/coursier"
+          export COURSIER_CACHE="$HOME/coursier"
+          printf 'sbt.version=${version}\n' > "$HOME/project/build.properties"
+          printf 'scalaVersion := "3.9.0"\n' > "$HOME/build.sbt"
+          cd "$HOME"
+          set -o pipefail
+          timeout 120 "$out/bin/sbtn" -Dsbt.log.noformat=true about \
+            2>&1 | tee "$TMPDIR/sbtn-about.log"
+          grep -Fq "This is sbt ${version}" "$TMPDIR/sbtn-about.log"
+          timeout 60 "$out/bin/sbtn" shutdown
+          runHook postInstallCheck
+        '';
+
+        meta = {
+          description = "Native sbt client built from source";
+          homepage = "https://www.scala-sbt.org/";
+          license = lib.licenses.asl20;
+          mainProgram = "sbtn";
+          platforms = [ system ];
+        };
+      };
     in
     {
       packages.${system} = {
-        inherit sbt;
+        inherit sbt sbtn;
         default = sbt;
       };
       devShells.${system}.default = pkgs.mkShellNoCC {
